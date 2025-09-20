@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus 자체 모니터링
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Spring Boot Chaos Engineering 애플리케이션
+  - job_name: 'chaos-engineering-app'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    scrape_timeout: 10s
+    # Docker Desktop의 경우 host.docker.internal 사용
+    # Linux 환경에서는 172.17.0.1 또는 실제 호스트 IP 사용
+
+# Alerting 설정 (선택사항)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093

@@ -280,7 +280,146 @@ curl http://localhost:8080/actuator/prometheus | grep http_server_requests
 
 ## 📊 모니터링 및 관찰
 
-### 주요 메트릭
+### 모니터링 스택 구성
+
+이 프로젝트는 Prometheus + Grafana 기반의 종합적인 모니터링 환경을 제공합니다.
+
+#### 1. 모니터링 환경 시작
+
+```bash
+# 모니터링 스택 실행 (백그라운드)
+docker-compose -f docker-compose.monitoring.yml up -d
+
+# 실행 상태 확인
+docker-compose -f docker-compose.monitoring.yml ps
+```
+
+#### 2. 접속 URL
+- **Grafana 대시보드**: http://localhost:3000 (로그인 없이 바로 접속 가능)
+- **Prometheus**: http://localhost:9090
+- **AlertManager**: http://localhost:9093
+
+> 💡 **Grafana 접속 팁**: 익명 접속이 활성화되어 있어 별도 로그인 없이 바로 대시보드를 확인할 수 있습니다. 필요시 admin/admin으로 로그인하여 설정을 변경할 수 있습니다.
+
+#### 3. 애플리케이션 실행 후 모니터링 시작
+```bash
+# 1. Spring Boot 애플리케이션 실행
+./gradlew bootRun
+
+# 2. 메트릭 수집 확인
+curl http://localhost:8080/actuator/prometheus
+
+# 3. Grafana에서 "Chaos Engineering 모니터링" 대시보드 열기
+```
+
+### 실시간 카오스 모니터링 시나리오
+
+#### 시나리오 1: 응답시간 모니터링
+```bash
+# 1. Chaos Monkey 지연 공격 활성화
+curl -X POST http://localhost:8080/actuator/chaosmonkey/enable
+curl -X POST http://localhost:8080/actuator/chaosmonkey/assaults \
+  -H "Content-Type: application/json" \
+  -d '{
+    "latencyActive": true,
+    "latencyRangeStart": 2000,
+    "latencyRangeEnd": 5000,
+    "level": 8
+  }'
+
+# 2. 반복적인 API 호출로 지연 효과 확인
+while true; do
+  curl -w "응답시간: %{time_total}s\n" http://localhost:8080/api/products
+  sleep 1
+done
+
+# 3. Grafana에서 "HTTP 요청 응답시간" 패널에서 실시간 증가 확인
+```
+
+#### 시나리오 2: 에러율 모니터링
+```bash
+# 1. 예외 공격 활성화
+curl -X POST http://localhost:8080/actuator/chaosmonkey/assaults \
+  -H "Content-Type: application/json" \
+  -d '{
+    "exceptionsActive": true,
+    "latencyActive": false,
+    "level": 7
+  }'
+
+# 2. 주문 생성 API 반복 호출
+for i in {1..20}; do
+  curl -X POST http://localhost:8080/api/orders \
+    -H "Content-Type: application/json" \
+    -d '{
+      "userId": "test-user-'$i'",
+      "items": [{"productId": "PROD-001", "productName": "테스트 상품", "quantity": 1, "unitPrice": 10000}],
+      "shippingAddress": "서울시 강남구",
+      "paymentMethod": "CREDIT_CARD"
+    }'
+  echo "주문 #$i 완료"
+  sleep 0.5
+done
+
+# 3. Grafana에서 "HTTP 에러율" 패널에서 5xx 에러 증가 확인
+```
+
+#### 시나리오 3: Circuit Breaker 모니터링
+```bash
+# 1. 높은 강도의 예외 공격으로 Circuit Breaker 트리거
+curl -X POST http://localhost:8080/actuator/chaosmonkey/assaults \
+  -H "Content-Type: application/json" \
+  -d '{
+    "exceptionsActive": true,
+    "level": 10
+  }'
+
+# 2. Circuit Breaker 상태 확인
+curl http://localhost:8080/actuator/health | jq '.components.circuitBreakers'
+
+# 3. Resilience4j 메트릭 확인
+curl http://localhost:8080/actuator/prometheus | grep resilience4j
+```
+
+### 커스텀 대시보드 메트릭
+
+Grafana 대시보드에서 확인할 수 있는 주요 메트릭:
+
+#### HTTP 성능 메트릭
+```promql
+# 평균 응답시간
+rate(http_server_requests_seconds_sum[5m]) / rate(http_server_requests_seconds_count[5m]) * 1000
+
+# 요청 처리량 (RPS)
+rate(http_server_requests_seconds_count[5m])
+
+# 에러율 (5xx)
+rate(http_server_requests_seconds_count{status=~"5.."}[5m]) / rate(http_server_requests_seconds_count[5m]) * 100
+```
+
+#### JVM 메트릭
+```promql
+# Heap 메모리 사용량
+jvm_memory_used_bytes{area="heap"}
+
+# GC 시간
+rate(jvm_gc_pause_seconds_sum[5m])
+
+# 스레드 수
+jvm_threads_live_threads
+```
+
+#### Chaos Monkey 메트릭
+```promql
+# Chaos Monkey 상태 (활성화/비활성화)
+chaos_monkey_enabled
+
+# 공격 실행 횟수 (커스텀 메트릭이 있는 경우)
+rate(chaos_monkey_assaults_total[5m])
+```
+
+### 주요 메트릭 해석
+
 - **HTTP 요청**: 응답 시간, 성공/실패율
 - **Circuit Breaker**: 상태 변화, 실패율
 - **JVM**: 메모리, GC, 스레드 상태
@@ -292,6 +431,15 @@ curl http://localhost:8080/actuator/prometheus | grep http_server_requests
 - `CircuitBreaker`: Circuit Breaker 상태 변경
 - `PaymentService`: 결제 처리 및 Fallback 실행
 - `OrderService`: 주문 처리 흐름 및 예외 처리
+
+### 모니터링 환경 정리
+```bash
+# 모니터링 스택 종료
+docker-compose -f docker-compose.monitoring.yml down
+
+# 볼륨까지 함께 삭제 (데이터 초기화)
+docker-compose -f docker-compose.monitoring.yml down -v
+```
 
 ## 🔧 개발 및 테스트
 

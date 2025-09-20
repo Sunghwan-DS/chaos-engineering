@@ -12,7 +12,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,chaosmonkey,conditions  # 보안상 필요한 엔드포인트만 노출
+        include: health,info,chaosmonkey,conditions,prometheus  # 보안상 필요한 엔드포인트만 노출
       base-path: /actuator
   endpoint:
     health:
