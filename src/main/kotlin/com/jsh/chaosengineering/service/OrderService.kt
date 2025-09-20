@@ -1,7 +1,5 @@
 package com.jsh.chaosengineering.service
 
-import com.jsh.chaosengineering.client.InventoryClient
-import com.jsh.chaosengineering.client.PaymentClient
 import com.jsh.chaosengineering.domain.*
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -11,7 +9,6 @@ import java.util.UUID
 
 @Service
 class OrderService(
-    private val productService: ProductService,
     private val inventoryService: InventoryService,
     private val paymentService: PaymentService
 ) {
