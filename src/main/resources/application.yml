@@ -1,0 +1,89 @@
+spring:
+  application:
+    name: chaos-engineering
+  profiles:
+    active: chaos-monkey
+
+server:
+  port: 8080
+
+# Actuator 설정
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,chaosmonkey,conditions  # 보안상 필요한 엔드포인트만 노출
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    chaosmonkey:
+      enabled: true
+    chaosmonkeyjmx:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Resilience4j Circuit Breaker 설정
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      inventory-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+
+# Chaos Monkey for Spring Boot 설정
+chaos:
+  monkey:
+    enabled: false  # 수동 제어: /actuator/chaosmonkey/enable로 활성화
+    watcher:
+      controller: true     # @Controller, @RestController 감시
+      restController: true
+      service: true       # @Service 감시
+      repository: true    # @Repository 감시
+      component: true     # @Component 감시
+    assaults:
+      level: 10                   # 공격 강도 (1-10) - 최대
+      deterministic: true         # 예측 가능한 공격 패턴 - 확률 증가
+      latencyRangeStart: 500      # 최소 지연 시간 (ms) - 더 실용적
+      latencyRangeEnd: 1500       # 최대 지연 시간 (ms) - 더 실용적
+      latencyActive: false        # 지연 공격 비활성화 (예외만)
+      exceptionsActive: true      # 예외 공격 활성화
+      killApplicationActive: false # 애플리케이션 종료 공격 비활성화
+      memoryActive: false         # 메모리 공격 비활성화
+
+# Swagger/OpenAPI 설정
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    operations-sorter: method
+    tags-sorter: alpha
+    doc-expansion: none
+    default-models-expand-depth: -1
+    default-model-expand-depth: -1
+
+# 로깅 설정
+logging:
+  level:
+    root: INFO
+    com.jsh.chaosengineering: DEBUG
+    com.jsh.chaosengineering.chaos: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
